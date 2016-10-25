@@ -4,7 +4,6 @@ import os
 import socket
 import ssl
 import select
-import httplib
 import urlparse
 import threading
 import gzip
@@ -12,6 +11,7 @@ import zlib
 import time
 import json
 import re
+import httplib
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
 from cStringIO import StringIO
@@ -71,7 +71,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             if not os.path.isfile(certpath):
                 epoch = "%d" % (time.time() * 1000)
                 p1 = Popen(["openssl", "req", "-new", "-key", self.certkey, "-subj", "/CN=%s" % hostname], stdout=PIPE)
-                p2 = Popen(["openssl", "x509", "-req", "-days", "3650", "-CA", self.cacert, "-CAkey", self.cakey, "-set_serial", epoch, "-out", certpath], stdin=p1.stdout, stderr=PIPE)
+                p2 = Popen(["openssl", "x509", "-req", "-sha256", "-days", "3650", "-CA", self.cacert, "-CAkey", self.cakey, "-set_serial", epoch, "-out", certpath], stdin=p1.stdout, stderr=PIPE)
                 p2.communicate()
 
         self.wfile.write("%s %d %s\r\n" % (self.protocol_version, 200, 'Connection Established'))
@@ -113,6 +113,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 other.sendall(data)
 
     def do_GET(self):
+        # if path is proxy2.test, then let user download ca
         if self.path == 'http://proxy2.test/':
             self.send_cacert()
             return
@@ -157,6 +158,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             if origin in self.tls.conns:
                 del self.tls.conns[origin]
             self.send_error(502)
+            import traceback
+            traceback.print_exc()
             return
 
         version_table = {10: 'HTTP/1.0', 11: 'HTTP/1.1'}
@@ -340,8 +343,8 @@ def test(HandlerClass=ProxyRequestHandler, ServerClass=ThreadingHTTPServer, prot
     if sys.argv[1:]:
         port = int(sys.argv[1])
     else:
-        port = 8080
-    server_address = ('', port)
+        port = 12345
+    server_address = ('localhost', port)
 
     HandlerClass.protocol_version = protocol
     httpd = ServerClass(server_address, HandlerClass)
